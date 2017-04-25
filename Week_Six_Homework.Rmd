@@ -1,0 +1,183 @@
+---
+title: "Week 6"
+author: "Cindy Hayward"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+##Case Study: Hometown Bank 
+Hometown Bank would like to understand and improve its status in the term deposit market. The bank has provided two different versions of a data set: a large version with 45,211 rows (bank-full.csv) and a sampled, smaller version with 4,000 rows (bank.csv). The dataset contains 17 variables. The bank would prefer we use the full data set in the analysis. The variable the bank is most interested in understanding is “y::category”, which refers to whether the client has subscribed a term deposit. It is a factor with two levels: “yes” or “no.” 
+
+The bank would like to understand what factors contribute to the customer opting for a term deposit, if there are any similar qualities that would indicate that the customer would opt in, and/or if we can identify the profile of the customer likely to purchase a term deposit.
+
+Using the large dataset provided, we will utilize three different models:   
+Logistic Regression   
+Decision Tree Algorithm 
+Bagging
+Random Forest 
+
+```{r echo=FALSE}
+getwd()
+setwd("C:/Users/cindyHayward/Desktop/ADM/Week_Six")
+bank<-read.csv("bank-full.csv")
+head(bank)
+options(scipen = 999)
+
+
+bank<-bank[,c(17,1:8)]#Changing the order of the columns to put the predicted variable first, and dropping all variables which were data surrounding the previous marketing campaign1.
+
+#Setting ranges for age
+bank$GenZ <- ifelse(bank$age..number < 22,1,0)
+bank$Millenial <- ifelse(bank$age..number >= 22 & bank$age..number<= 37,1,0)
+bank$GenY <- ifelse(bank$age..number >= 38 & bank$age..number<= 52,1,0)
+bank$Boomer <- ifelse(bank$age..number >= 53 & bank$age..number<= 71,1,0)
+bank$SilentGen <- ifelse(bank$age..number >= 72,1,0)
+
+bank<-bank[,c(1,3:14)]#Changing the order of the columns to put the predicted variable first.
+
+#head(bank)Checking to see that all is well.
+#names(bank)
+#summary(bank)
+dim(bank)#How many rows and columns
+table(bank$y)#How many without Term Deposits and with Term Deposits
+```
+**Exploring the Data**
+
+The original data set is made up of 45,211 records, containing 17 variables. All variables which will not help us answer the question of "Who will buy a term deposit?" have been eliminated for the purpose of our analysis.     
+
+The data related to the marketing campaign could be helpful in future projects to analyze what is effective relative to marketing campaigns.  The initial look at the dataset in its entirety, showed that duration, and some date information was significant.  These variables can be useful for the development of the next campaign, once we have determined whom the bank should target to market term deposits to. A description of the variable follows: 
+  
+ y..category--  indicates whether the customer subscribed to the term deposit  
+ default..category-- Has credit with the bank in default  
+ housing..category--  Does the customer have a mortgage account  
+ loan..category--   Has a personal loan   
+ job..category-- possible values: bluecollar, entrepreneur, housemaid, management,    retired, selfemployed, services, student, technician, unemployed, unknown  
+ marital..category-- with the possible values, Married, Single, Divorced  
+ education..category-- with the possible values: Tertiary, Secondary,Primary  
+ balance..number-- average account balance  
+ GenZ-- account holders aged less than 22  
+ Millenial-- account holders ages 22-37  
+ GenY-- account holders ages 38-52  
+ Boomer-- account holders ages 63-71            
+ SilentGen-- account holders over 72  
+ 
+**Dividing the Data Set**
+
+We will divide our data into two sets; one to "train", or practice on, and one to test our finely tuned model.  We will perform a random draw of the dataset, with 80% in our training set, and 20% in the test set. We will compare the two to determine that we have a relatively equal distribution of positive responses.  After performing the division, 12.1% of people in training set have term deposits and 11.6% in validation set have term deposits.
+
+```{r echo=FALSE}
+set.seed(123) #set a seed to do draws from a random uniform distribution.
+bank_rand <- bank[order(runif(45211)), ]
+bank_Test <- bank_rand[1:9024, ] #Training data set of 9024 observations(20% of whole)
+bank_Train <-bank_rand[9025:45211, ]#Test data set of 45,211 observations(remaining 80% of whole)
+
+prop.table(table(bank_Train$y..category))#checking to see if we still have an equal distributio of positive outcomes
+prop.table(table(bank_Test$y..category))#checking to see if we still have an equal distribution of positive outcomes
+```
+**Logistic Regression Analysis**
+A traditional method of classification is logistic regression, or odds ratios.  In other words, given a certain characteristic, what are the odds that an outcome will take place.  The initial model looked at all data points for each individual record. All attributes except job..unemployed and SilentGen were statistically significant. The term statistically significant means that there is almost zero chance that the result is a matter of chance. 
+
+**Key Takeaways:** 
+
+The "highest odds" attributes are Retired, Student, Tertiary(level of education).  The results are not conclusive enough to be actionable on their own.  As this dataset is the result of a calling campaign--one could wonder if people who were home to answer the phone were retired people or students?  
+
+```{r echo=FALSE}
+Train_Logit <- glm(y..category~., data=bank_Train, family=binomial()) #Fit a logistic regression
+summary(Train_Logit) #coefficients are presented as log-odds (probabilities on logit scale)
+exp(cbind(Odds_Ratio=coef(Train_Logit))) #Use the exponent of log odds to produce odds ratio.
+
+bank_Predict_Logit=data.frame(predict(Train_Logit, newdata=bank_Test,type="terms"))
+```
+#### Checking to determine if the model is statistically significant.
+```{r echo=FALSE}
+anova(Train_Logit,test="Chisq")#That would be yes.
+```
+###Decision Tree Algorithms
+Classification trees, often called decision trees, are one method utilized to predict behavior. The benefit of using decision trees is the ease with which they can be interpreted or read.  The decision tree incorporates much smaller splits and many more “leaves” at the bottom of the model.  
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(partykit)
+set.seed(123)
+
+bank_rpart<-rpart(y..category~.,data = bank_Train, control = rpart.control(minsplit = 80, cp=.0003))
+
+plot(bank_rpart, uniform=TRUE, main="Classification Tree for Term Deposit")
+text(bank_rpart, use.n=TRUE, all=TRUE, cex=0.8)
+
+rpart.plot(bank_rpart, type=0, extra=101)
+rpart.plot(bank_rpart, type=1, extra=101)
+
+actual <- bank_Train$y..category
+predicted <- predict(bank_rpart, bank_Test)
+
+library(caret)
+library(partykit)
+
+```
+## Bagging
+
+Bagging averages many trees so it reduces the variance of the instability of generating just one tree. Bagging leads to improved prediction. The tradeoff is you lose interpretability and the ability to see simple structure in a tree.
+```{r echo=FALSE}
+library(randomForest)
+set.seed(123) 
+
+#Set mtry to equal all predictors. This means all predictors should be considered at each split. This is what makes it "bagging." The default number of trees is 500. 
+
+bank_bag <- randomForest(y..category~., mtry=8, data=bank_Test, na.action=na.omit, importance=TRUE)
+print(bank_bag) #note the "out of bag" (OOB) error rate. 
+```
+
+** Most Important Predictors Using Bagging **
+
+Look at the mean decrease in node impurity resulting from splits over that variable.  
+
+```{r echo=FALSE}
+varImpPlot(bank_bag)
+```
+
+```{r echo=FALSE}
+actual <- bank_Test$y..category 
+bank_predicted <- predict(bank_bag, newdata=bank_Test, type="class") 
+bank_results.matrix.bag <- confusionMatrix(bank_predicted, actual, positive="yes") 
+print(bank_results.matrix.bag)
+```
+**Evaluating the Performance**
+The model has an accuracy rate of 97%, representing the overall accuracy of how often a prediction is correct.  Other measures commonly used are specificity, which measures the percentage of how often predicted purchase actually happens, in this case 99%. Precision, the percentage of predicted false that is truly false, is high, at 97%. Sensitivity measurement, the percentage of the model that is correct, is 75%.  Overall, a good result. 
+
+
+## Random Forest
+
+Random forests consider only a subset of the predictors at each split. This means the node splits are not dominated by one or a few strong predictors, and, thus, give other (i.e. less strong) predictors more chances to be used. When we average the resulting trees, we get more reliable results since the individual trees are not dominated by a few strong predictors.
+
+```{r echo=FALSE}
+bank_RForest <- randomForest(y..category ~.,data=bank_Train, mtry=12, ntree=500,na.action = na.omit, importance=TRUE) #default to try three predictors at a time and create 500 trees. 
+print(bank_RForest) 
+
+actual <- bank_Test$y..category 
+bank_predicted <- predict(bank_RForest, newdata=bank_Test, type="class") 
+bank_results.matrix.rf <- confusionMatrix(bank_predicted, actual, positive="yes") 
+print(bank_results.matrix.rf)
+```
+**Evaluating the Performance**
+
+The accuracy rate of 87%, which represents the overall accuracy of how often a prediction is correct.  Other measures commonly used are specificity, which measures the percentage of how often predicted purchase actually occurs, in this case 95%. Precision, the percentage of predicted false that is truly false, is high, at 90%. Sensitivity measurement, the percentage of the model that is correct, is 28%.  Overall, a lessor performance against Bagging. 
+
+**Visualizing the True Positive vs. False Positive**
+
+Called the ROC curve, this displays the true positive rate (sensitivity) against the false positive rate (specificity). Ideally, the curve will follow the left hand borders. Ours is...okay.
+
+```{r echo=FALSE}
+#Creating the Curve
+library(ROCR)
+bank_RForest_predict_prob<-predict(bank_RForest, type="prob", bank_Test)# same as above for predict, but add "prob".
+bank_pred = prediction(bank_RForest_predict_prob[,2],bank_Test$y..category)#use [,2] to pick the malignant class prob
+bank_RForest.perf = performance(bank_pred,"tpr","fpr") #true pos and false pos
+plot(bank_RForest.perf ,main="ROC Curve for Random Forest",col=2,lwd=2)
+abline(a=0,b=1,lwd=2,lty=2,col="gray")
+
+#unlist(bank_RForest.perf@y.values) #This is the AUC value (area under the ROC curve)
+```
+
+
